@@ -4,7 +4,7 @@ import pandas as pd
 import plots
 from datetime import datetime, timedelta
 
-__version__ = '0.0.1'
+__version__ = '0.0.2'
 __author__ = 'Lukas Calmbach'
 __author_email__ = 'lcalmbach@gmail.com'
 VERSION_DATE = '2022-10-10'
@@ -12,10 +12,10 @@ my_name = 'Bruttoverbrauch Elektrizität der Stadt Zürich'
 my_kuerzel = "El-zh"
 SOURCE_URL = 'https://data.stadt-zuerich.ch/dataset/ewz_bruttolastgang_stadt_zuerich'
 GIT_REPO = 'https://github.com/lcalmbach/electricity-consumption-zh'
-APP_INFO = f"""<div style="background-color:powderblue; padding: 10px;border-radius: 15px;">
+APP_INFO = f"""<div style="background-color:'#34282C'; padding: 10px;border-radius: 15px; font-color:'black';">
     <small>App created by <a href="mailto:{__author_email__}">{__author__}</a><br>
     version: {__version__} ({VERSION_DATE})<br>
-    source: <a href="{SOURCE_URL}">Stadt Zürich Open Data</a>
+    source: <a href="{SOURCE_URL}">Stadt Zürich Open Data/EWZ</a>
     <br><a href="{GIT_REPO}">git-repo</a>
     """
 
@@ -23,6 +23,13 @@ def_options_days = (1, 365)
 def_options_hours = (0, 23)
 def_options_weeks = (1, 53)
 
+def init():
+    st.set_page_config(  # Alternate names: setup_page, page, layout
+        initial_sidebar_state = "auto", 
+        page_title = 'E-Verbrauch-zh', 
+        page_icon = '⚡',
+    )
+    
 @st.cache
 def get_data():
     def add_aggregation_codes(df):
@@ -66,18 +73,21 @@ def get_interval_dates(sel_days):
     dat1 = base_date + timedelta(days=sel_days[0]-1)
     dat2 = base_date + timedelta(days=sel_days[1]-1)
     return f"{dat1.strftime(fmt)[:5]} - {dat2.strftime(fmt)[:5]}"
-        
+
+
 def consumption_year(df):
     def show_plot(df):
         settings = {'x': 'day', 'y':'cum_bruttolastgang', 'color':'year:O', 'tooltip':['year','day', 'cum_bruttolastgang'], 
                 'width':800,'height':400, 'y_title': 'Kumulierter Verbrauch [GWh]', 'x_title': 'Tag im Jahr', 
                 'title': "Kumulierter Verbrauch"}
         plots.line_chart(df, settings)
+        # st.markdown(figure_text['year'][0])
 
         settings['y'] = 'bruttolastgang'
         settings['y_title'] = 'Verbrauch [MWh]'
         settings['title'] = "Tages-Verbrauch"
         plots.line_chart(df, settings)
+        # st.markdown(figure_text['year'][1])
 
     def get_filtered_data(df):
         with st.sidebar.expander('🔎 Filter', expanded=True):
@@ -129,10 +139,11 @@ def consumption_day(df):
 def consumption_week(df):
     def show_plot(df):
         settings = {'x': 'week_time', 'x_dt': 'O', 'y':'bruttolastgang', 'color':'year:O', 'tooltip':['year','week_time', 'bruttolastgang'], 
-                'width':800,'height':400, 'title': 'Wochenganglinie, mittlerer Viertelstunden-Verbrauch'}
+                'width':800,'height':400, 'title': 'Wochenganglinie, mittlerer Viertelstunden-Verbrauch', 'x_title': 'Wochentag',
+                'y_title': 'Verbrauch [MWh]'}
         
-        #settings['x_labels'] = {0: 'So',1:'Mon',2:'Di',3:'Mi',4:'Do',5:'Fr',6:'Sa'}
-        settings['x_labels'] = ['Mon','Di','Mi','Do','Fr','Sa','So']
+        # settings['x_labels'] = {0: 'So',1:'Mon',2:'Di',3:'Mi',4:'Do',5:'Fr',6:'Sa'}
+        # settings['x_labels'] = ['Mon','Di','Mi','Do','Fr','Sa','So']
         settings['x_labels'] = [0,1,2,3,4,5,6]
         plots.line_chart(df, settings)
 
@@ -156,6 +167,7 @@ def consumption_week(df):
     show_plot(df_time)
 
 def main():
+    init()
     df = get_data()
     st.markdown("### Bruttoverbrauch elektrische Energie der Stadt Zürich, seit 2019")
     st.markdown(f"Quelle: [Stadt Zürich Open Data]({SOURCE_URL})")
