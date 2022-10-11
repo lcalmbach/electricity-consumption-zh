@@ -2,26 +2,23 @@ import streamlit as st
 from streamlit_option_menu import option_menu
 import pandas as pd
 import plots
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
+import os
 
-__version__ = '0.0.2'
+__version__ = '0.0.3'
 __author__ = 'Lukas Calmbach'
 __author_email__ = 'lcalmbach@gmail.com'
-VERSION_DATE = '2022-10-10'
+VERSION_DATE = '2022-10-11'
 my_name = 'Bruttoverbrauch Elektrizität der Stadt Zürich'
 my_kuerzel = "El-zh"
 SOURCE_URL = 'https://data.stadt-zuerich.ch/dataset/ewz_bruttolastgang_stadt_zuerich'
 GIT_REPO = 'https://github.com/lcalmbach/electricity-consumption-zh'
-APP_INFO = f"""<div style="background-color:'#34282C'; padding: 10px;border-radius: 15px; font-color:'black';">
-    <small>App created by <a href="mailto:{__author_email__}">{__author__}</a><br>
-    version: {__version__} ({VERSION_DATE})<br>
-    source: <a href="{SOURCE_URL}">Stadt Zürich Open Data/EWZ</a>
-    <br><a href="{GIT_REPO}">git-repo</a>
-    """
+
 
 def_options_days = (1, 365)
 def_options_hours = (0, 23)
 def_options_weeks = (1, 53)
+current_year = date.today().year
 
 def init():
     st.set_page_config(  # Alternate names: setup_page, page, layout
@@ -29,7 +26,17 @@ def init():
         page_title = 'E-Verbrauch-zh', 
         page_icon = '⚡',
     )
-    
+
+def get_info(last_date):
+    text = f"""<div style="background-color:'#34282C'; padding: 10px;border-radius: 15px; font-color:'black';">
+    <small>App von <a href="mailto:{__author_email__}">{__author__}</a><br>
+    Version: {__version__} ({VERSION_DATE})<br>
+    Quelle: <a href="{SOURCE_URL}">Stadt Zürich Open Data/EWZ</a><br>
+    Daten bis: {last_date.strftime('%d.%m.%Y %H:%M')}
+    <br><a href="{GIT_REPO}">git-repo</a>
+    """
+    return text
+
 @st.cache
 def get_data():
     def add_aggregation_codes(df):
@@ -56,11 +63,38 @@ def get_data():
         df['week_time'] = df['day_of_week'] + df['hour']/24 + df['zeitpunkt'].dt.minute / (24*60)
         return df
 
+    def filter_data(_df):
+        # filter duplicates ( F/E values during the period end of june 2020)  
+        return _df[ ~( (_df['status']=='F') & (_df['zeitpunkt'] > '2020-06-18') & (_df['zeitpunkt'] < '2020-07-01') )]
+
+    def get_current_year():
+        """
+        verifies the last timestamp of the current year file. if older than 48 hours, it realoads the file. otherwise the
+        file is kept and returned.
+
+        Returns:
+            pd.Datframe: dataframe of current year
+        """
+        current_year_filename = f'./data/{current_year}_ewz_bruttolastgang.csv'
+        url = f'https://data.stadt-zuerich.ch/dataset/ewz_bruttolastgang_stadt_zuerich/download/{current_year}_ewz_bruttolastgang.csv'
+        _df = pd.read_csv(current_year_filename, sep=',')
+        _df['zeitpunkt'] = pd.to_datetime(_df['zeitpunkt'])
+        last_record_time = _df['zeitpunkt'].max().to_pydatetime()
+        time_diff = datetime.now() - last_record_time
+        # if timestamp is older than 48 hours, then download new
+        if time_diff.seconds > (48 * 3600):
+            _df = pd.read_csv(url, sep=',')
+            _df.to_csv(current_year_filename,sep=',')
+        return _df
+
     df = pd.DataFrame()
-    for jahr in [2019,2020,2021,2022]:
+    for jahr in range(2019, current_year):
         _df = pd.read_csv(f'./data/{jahr}_ewz_bruttolastgang.csv', sep=',')
         df = pd.concat([df, _df], axis=0)
-    df = df[(df['status']=='E') | (df['zeitpunkt']<'2020-06-15')]
+    df = filter_data(df)
+    # current year is read from url, saved to data then read from data until next day  
+    _df = get_current_year()
+    df = pd.concat([df, _df], axis=0)
     df = df[['zeitpunkt','bruttolastgang']]
     df['bruttolastgang'] = df['bruttolastgang'] / 1e6
     df = add_aggregation_codes(df)
@@ -186,7 +220,7 @@ def main():
     elif menu_action == menu_options[2]:
         consumption_week(df)
 
-    st.sidebar.markdown(APP_INFO, unsafe_allow_html=True)
+    st.sidebar.markdown(get_info(df['zeitpunkt'].max()), unsafe_allow_html=True, )
 
 if __name__ == '__main__':
     main()
