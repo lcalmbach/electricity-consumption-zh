@@ -3,12 +3,12 @@ from streamlit_option_menu import option_menu
 import pandas as pd
 import plots
 from datetime import datetime, timedelta, date
-import os
+from utilities import load_css
 
-__version__ = '0.0.3'
+__version__ = '0.0.4'
 __author__ = 'Lukas Calmbach'
 __author_email__ = 'lcalmbach@gmail.com'
-VERSION_DATE = '2022-10-11'
+VERSION_DATE = '2022-10-13'
 my_name = 'Bruttoverbrauch Elektrizität der Stadt Zürich'
 my_kuerzel = "El-zh"
 SOURCE_URL = 'https://data.stadt-zuerich.ch/dataset/ewz_bruttolastgang_stadt_zuerich'
@@ -26,14 +26,15 @@ def init():
         page_title = 'E-Verbrauch-zh', 
         page_icon = '⚡',
     )
+    load_css()
 
 def get_info(last_date):
-    text = f"""<div style="background-color:'#34282C'; padding: 10px;border-radius: 15px; font-color:'black';">
+    text = f"""<div style="background-color:#34282C; padding: 10px;border-radius: 15px; border:solid 1px white;">
     <small>App von <a href="mailto:{__author_email__}">{__author__}</a><br>
     Version: {__version__} ({VERSION_DATE})<br>
     Quelle: <a href="{SOURCE_URL}">Stadt Zürich Open Data/EWZ</a><br>
     Daten bis: {last_date.strftime('%d.%m.%Y %H:%M')}
-    <br><a href="{GIT_REPO}">git-repo</a>
+    <br><a href="{GIT_REPO}">git-repo</a></small></div>
     """
     return text
 
@@ -81,8 +82,7 @@ def get_data():
         _df['zeitpunkt'] = pd.to_datetime(_df['zeitpunkt'])
         last_record_time = _df['zeitpunkt'].max().to_pydatetime()
         time_diff = datetime.now() - last_record_time
-        # if timestamp is older than 48 hours, then download new
-        if time_diff.seconds > (48 * 3600):
+        if time_diff.days > 1:
             _df = pd.read_csv(url, sep=',')
             _df.to_csv(current_year_filename,sep=',')
         return _df
@@ -111,7 +111,7 @@ def get_interval_dates(sel_days):
 
 def consumption_year(df):
     def show_plot(df):
-        settings = {'x': 'day', 'y':'cum_bruttolastgang', 'color':'year:O', 'tooltip':['year','day', 'cum_bruttolastgang'], 
+        settings = {'x': 'day', 'y':'cum_bruttolastgang', 'color':'year:O', 'tooltip':['year','day', 'cum_bruttolastgang', 'bruttolastgang'], 
                 'width':800,'height':400, 'y_title': 'Kumulierter Verbrauch [GWh]', 'x_title': 'Tag im Jahr', 
                 'title': "Kumulierter Verbrauch"}
         plots.line_chart(df, settings)
@@ -134,16 +134,24 @@ def consumption_year(df):
             df = df[df['year'].isin(sel_years)]
         return df
 
-    df_day = get_filtered_data(df.copy())
+    df_year = get_filtered_data(df.copy())
     fields = ['year', 'day', 'bruttolastgang']
-    agg_fields = ['year','day']
-    df_day = df_day[fields].groupby(agg_fields).sum().reset_index()
-    df_day['cum_bruttolastgang']=df_day.groupby(['year'])['bruttolastgang'].cumsum()
-    df_day = df_day[df_day['bruttolastgang'] > 2]
-    show_plot(df_day)
+    agg_fields = ['year', 'day']
+    df_year = df_year[fields].groupby(agg_fields).sum().reset_index()
+    df_year['cum_bruttolastgang'] = df_year.groupby(['year'])['bruttolastgang'].cumsum()
+    df_year['cum_bruttolastgang'] = df_year['cum_bruttolastgang'].round(1)
+    df_year['bruttolastgang'] = df_year['bruttolastgang'].round(3)
+    df_year = df_year[df_year['bruttolastgang'] > 2]
+    show_plot(df_year)
 
 
 def consumption_day(df):
+    """
+    Shows line-plot day of year versus cumulated consumption, one line per year
+
+    Args:
+        df (_type_): all consumptions
+    """
     def show_plot(df):
         settings = {'x': 'zeit', 'x_dt': 'O', 'y':'bruttolastgang', 'color':'year:O', 'tooltip':['year','zeit', 'bruttolastgang'], 
                 'width':800,'height':400, 'title': 'Tagesganglinie, mittlerer Viertelstunden-Verbrauch'}
@@ -168,9 +176,17 @@ def consumption_day(df):
     fields = ['year', 'zeit', 'bruttolastgang']
     agg_fields = ['year','zeit']
     df_time = df_time[fields].groupby(agg_fields).mean().reset_index()
+    df_time['bruttolastgang'] = df_time['bruttolastgang'].round(1)
+    st.write(df.head())
     show_plot(df_time)
 
 def consumption_week(df):
+    """
+    Shows line-plot day of week day versus average consumption, one line per year
+
+    Args:
+        df (_type_): all consumptions
+    """
     def show_plot(df):
         settings = {'x': 'week_time', 'x_dt': 'O', 'y':'bruttolastgang', 'color':'year:O', 'tooltip':['year','week_time', 'bruttolastgang'], 
                 'width':800,'height':400, 'title': 'Wochenganglinie, mittlerer Viertelstunden-Verbrauch', 'x_title': 'Wochentag',
@@ -186,7 +202,7 @@ def consumption_week(df):
             sel_weeks = st.slider('Auswahl Kalenderwochen', min_value=1, max_value=max(def_options_weeks), value=def_options_weeks)
             st.markdown(get_interval_dates(sel_weeks))
             
-            sel_years = st.multiselect('Auswahl Jahre', options=range(2019,2023), help="keine Auswahl = alle Jahre")
+            sel_years = st.multiselect('Auswahl Jahre', options=range(2019,current_year+1), help="keine Auswahl = alle Jahre")
             if sel_weeks != def_options_weeks:
                 df = df[(df['week'] >= sel_weeks[0]) & (df['week'] <= sel_weeks[1])]
         if sel_years:
@@ -198,13 +214,17 @@ def consumption_week(df):
     fields = ['year', 'week_time', 'bruttolastgang']
     agg_fields = ['year','week_time']
     df_time = df_time[fields].groupby(agg_fields).mean().reset_index()
+    df_time['bruttolastgang'] =df_time['bruttolastgang'].round(1)
     show_plot(df_time)
 
 def main():
+    """
+    main menu with 3 options: cum consumption year of day, mean daily consumption in week 
+    and mean 1/4 consumption in day for selected period and years
+    """
     init()
     df = get_data()
     st.markdown("### Bruttoverbrauch elektrische Energie der Stadt Zürich, seit 2019")
-    st.markdown(f"Quelle: [Stadt Zürich Open Data]({SOURCE_URL})")
     st.sidebar.markdown("### ⚡ Verbrauch-zh")
 
     menu_options = ['Jahresverlauf', 'Tagesverlauf', 'Wochenverbrauch']
