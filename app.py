@@ -38,7 +38,7 @@ def get_info(last_date):
     """
     return text
 
-@st.experimental_memo(max_entries=3, ttl=3600)
+@st.experimental_singleton()
 def get_data():
     def add_aggregation_codes(df):
         df['zeitpunkt']= pd.to_datetime(df['zeitpunkt'])
@@ -177,7 +177,6 @@ def consumption_day(df):
     agg_fields = ['year','zeit']
     df_time = df_time[fields].groupby(agg_fields).mean().reset_index()
     df_time['bruttolastgang'] = df_time['bruttolastgang'].round(1)
-    st.write(df.head())
     show_plot(df_time)
 
 def consumption_week(df):
