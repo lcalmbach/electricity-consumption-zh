@@ -38,7 +38,7 @@ def get_info(last_date):
     """
     return text
 
-@st.cache
+@st.experimental_memo(max_entries=3, ttl=3600)
 def get_data():
     def add_aggregation_codes(df):
         df['zeitpunkt']= pd.to_datetime(df['zeitpunkt'])
@@ -240,7 +240,7 @@ def main():
     elif menu_action == menu_options[2]:
         consumption_week(df)
 
-    st.sidebar.markdown(get_info(df['zeitpunkt'].max()), unsafe_allow_html=True, )
+    st.sidebar.markdown(get_info(df['zeitpunkt'].max()), unsafe_allow_html=True)
 
 if __name__ == '__main__':
     main()
