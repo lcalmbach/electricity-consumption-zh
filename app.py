@@ -5,10 +5,10 @@ import plots
 from datetime import datetime, timedelta, date
 from utilities import load_css
 
-__version__ = '0.0.4'
+__version__ = '0.0.5'
 __author__ = 'Lukas Calmbach'
 __author_email__ = 'lcalmbach@gmail.com'
-VERSION_DATE = '2022-10-13'
+VERSION_DATE = '2022-10-15'
 my_name = 'Bruttoverbrauch Elektrizität der Stadt Zürich'
 my_kuerzel = "El-zh"
 SOURCE_URL = 'https://data.stadt-zuerich.ch/dataset/ewz_bruttolastgang_stadt_zuerich'
@@ -18,7 +18,8 @@ GIT_REPO = 'https://github.com/lcalmbach/electricity-consumption-zh'
 def_options_days = (1, 365)
 def_options_hours = (0, 23)
 def_options_weeks = (1, 53)
-current_year = date.today().year
+CURRENT_YEAR = date.today().year
+FIRST_YEAR = 2019
 
 def init():
     st.set_page_config(  # Alternate names: setup_page, page, layout
@@ -38,7 +39,7 @@ def get_info(last_date):
     """
     return text
 
-@st.experimental_singleton()
+# @st.experimental_singleton()
 def get_data():
     def add_aggregation_codes(df):
         df['zeitpunkt']= pd.to_datetime(df['zeitpunkt'])
@@ -68,7 +69,7 @@ def get_data():
         # filter duplicates ( F/E values during the period end of june 2020)  
         return _df[ ~( (_df['status']=='F') & (_df['zeitpunkt'] > '2020-06-18') & (_df['zeitpunkt'] < '2020-07-01') )]
 
-    def get_current_year():
+    def get_CURRENT_YEAR():
         """
         verifies the last timestamp of the current year file. if older than 48 hours, it realoads the file. otherwise the
         file is kept and returned.
@@ -76,24 +77,28 @@ def get_data():
         Returns:
             pd.Datframe: dataframe of current year
         """
-        current_year_filename = f'./data/{current_year}_ewz_bruttolastgang.csv'
-        url = f'https://data.stadt-zuerich.ch/dataset/ewz_bruttolastgang_stadt_zuerich/download/{current_year}_ewz_bruttolastgang.csv'
-        _df = pd.read_csv(current_year_filename, sep=',')
+        CURRENT_YEAR_filename = f'./data/{CURRENT_YEAR}_ewz_bruttolastgang.csv'
+        url = f'https://data.stadt-zuerich.ch/dataset/ewz_bruttolastgang_stadt_zuerich/download/{CURRENT_YEAR}_ewz_bruttolastgang.csv'
+        _df = pd.read_csv(CURRENT_YEAR_filename, sep=',')
         _df['zeitpunkt'] = pd.to_datetime(_df['zeitpunkt'])
         last_record_time = _df['zeitpunkt'].max().to_pydatetime()
         time_diff = datetime.now() - last_record_time
+        st.write(time_diff)
         if time_diff.days > 1:
+            st.write('reading new data ')
             _df = pd.read_csv(url, sep=',')
-            _df.to_csv(current_year_filename,sep=',')
+            st.write(f"writing file {CURRENT_YEAR_filename}")
+            _df.to_csv(CURRENT_YEAR_filename, sep=',')
+            st.write('still here!')
         return _df
 
     df = pd.DataFrame()
-    for jahr in range(2019, current_year):
+    for jahr in range(FIRST_YEAR, CURRENT_YEAR):
         _df = pd.read_csv(f'./data/{jahr}_ewz_bruttolastgang.csv', sep=',')
         df = pd.concat([df, _df], axis=0)
     df = filter_data(df)
     # current year is read from url, saved to data then read from data until next day  
-    _df = get_current_year()
+    _df = get_CURRENT_YEAR()
     df = pd.concat([df, _df], axis=0)
     df = df[['zeitpunkt','bruttolastgang']]
     df['bruttolastgang'] = df['bruttolastgang'] / 1e6
@@ -102,7 +107,7 @@ def get_data():
 
 
 def get_interval_dates(sel_days):
-    base_date = datetime(2022, 1, 1)
+    base_date = datetime(CURRENT_YEAR, 1, 1)
     fmt = "%d.%m/%y"
     dat1 = base_date + timedelta(days=sel_days[0]-1)
     dat2 = base_date + timedelta(days=sel_days[1]-1)
@@ -127,7 +132,7 @@ def consumption_year(df):
         with st.sidebar.expander('🔎 Filter', expanded=True):
             sel_days = st.slider('Auswahl Tag im Jahr', min_value=1, max_value=max(def_options_days), value=def_options_days)
             st.markdown(get_interval_dates(sel_days))
-            sel_years = st.multiselect('Auswahl Jahre', options=range(2019,2023), help="keine Auswahl = alle Jahre")
+            sel_years = st.multiselect('Auswahl Jahre', options=range(FIRST_YEAR,CURRENT_YEAR+1), help="keine Auswahl = alle Jahre")
         if sel_days != def_options_days:
             df = df[(df['day'] >= sel_days[0]) & (df['day'] <= sel_days[1])]
         if sel_years:
@@ -164,7 +169,7 @@ def consumption_day(df):
             sel_days = st.slider('Auswahl Tag im Jahr', min_value=1, max_value=365, value=def_options_days)
             st.markdown(get_interval_dates(sel_days))
             
-            sel_years = st.multiselect('Auswahl Jahre', options=range(2019,2023), help="keine Auswahl = alle Jahre")
+            sel_years = st.multiselect('Auswahl Jahre', options=range(FIRST_YEAR,CURRENT_YEAR+1), help="keine Auswahl = alle Jahre")
             if sel_days != def_options_days:
                 df = df[(df['day'] >= sel_days[0]) & (df['day'] <= sel_days[1])]
         if sel_years:
@@ -201,7 +206,7 @@ def consumption_week(df):
             sel_weeks = st.slider('Auswahl Kalenderwochen', min_value=1, max_value=max(def_options_weeks), value=def_options_weeks)
             st.markdown(get_interval_dates(sel_weeks))
             
-            sel_years = st.multiselect('Auswahl Jahre', options=range(2019,current_year+1), help="keine Auswahl = alle Jahre")
+            sel_years = st.multiselect('Auswahl Jahre', options=range(FIRST_YEAR,CURRENT_YEAR+1), help="keine Auswahl = alle Jahre")
             if sel_weeks != def_options_weeks:
                 df = df[(df['week'] >= sel_weeks[0]) & (df['week'] <= sel_weeks[1])]
         if sel_years:
@@ -223,7 +228,7 @@ def main():
     """
     init()
     df = get_data()
-    st.markdown("### Bruttoverbrauch elektrische Energie der Stadt Zürich, seit 2019")
+    st.markdown(f"### Bruttoverbrauch elektrische Energie der Stadt Zürich, seit {FIRST_YEAR}")
     st.sidebar.markdown("### ⚡ Verbrauch-zh")
 
     menu_options = ['Jahresverlauf', 'Tagesverlauf', 'Wochenverbrauch']
