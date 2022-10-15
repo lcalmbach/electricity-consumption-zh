@@ -39,7 +39,7 @@ def get_info(last_date):
     """
     return text
 
-# @st.experimental_singleton()
+@st.experimental_memo(ttl=6*3600, max_entries=3)
 def get_data():
     def add_aggregation_codes(df):
         df['zeitpunkt']= pd.to_datetime(df['zeitpunkt'])
@@ -83,13 +83,9 @@ def get_data():
         _df['zeitpunkt'] = pd.to_datetime(_df['zeitpunkt'])
         last_record_time = _df['zeitpunkt'].max().to_pydatetime()
         time_diff = datetime.now() - last_record_time
-        st.write(time_diff)
         if time_diff.days > 1:
-            st.write('reading new data ')
             _df = pd.read_csv(url, sep=',')
-            st.write(f"writing file {CURRENT_YEAR_filename}")
             _df.to_csv(CURRENT_YEAR_filename, sep=',')
-            st.write('still here!')
         return _df
 
     df = pd.DataFrame()
